@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+    <meta name="theme-color" content="#0b1114">
+    <title>空教室</title>
+    <link rel="stylesheet" href="css/style.css">
+    <script>
+        // 早期统一缩放：在加载页出现前即按 9:16 基准(1080×1920)算出舞台缩放系数，
+        // 写入 --stage-scale / --upx，保证加载页/主菜单等 UI 一开始就按统一比例等比缩放。
+        (function () {
+            var BASE_W = 1080;
+            function applyStageScale() {
+                var vw = window.innerWidth;
+                var vh = window.innerHeight;
+                // 与 CSS 的 #game-container 宽度公式一致：min(100vw, 100vh*9/16)
+                var stageW = Math.min(vw, vh * 9 / 16);
+                var scale = stageW / BASE_W;
+                var root = document.documentElement;
+                root.style.setProperty('--stage-scale', String(scale));
+                root.style.setProperty('--upx', scale + 'px');
+            }
+            applyStageScale();
+            window.addEventListener('resize', applyStageScale);
+            window.addEventListener('orientationchange', applyStageScale);
+        }());
+    </script>
+</head>
+<body>
+    <main id="game-shell" aria-label="空教室游戏区域">
+        <section id="game-container">
+            <canvas id="game-canvas" aria-label="空教室画面"></canvas>
+            <div id="ui-layer">
+                <div id="loading-screen" class="screen-overlay active">
+                    <div class="loading-card">
+                        <div class="loading-title">正在校准旧教室……</div>
+                        <div class="loading-track"><span id="loading-bar"></span></div>
+                        <div id="loading-text" class="loading-text">0%</div>
+                    </div>
+                </div>
+
+                <div id="start-screen" class="screen-overlay">
+                    <div class="start-card">
+                        <div class="menu-corner menu-version">v0.2.17</div>
+                        <button id="btn-volume" class="menu-corner menu-sound">声音：开</button>
+                        <button id="btn-hotspot-hint" class="menu-corner menu-hint-toggle">高亮提示：关</button>
+
+                        <section class="menu-title-block" aria-label="游戏标题">
+                            <p class="chapter-label">第一章</p>
+                            <h1>空教室</h1>
+                            <p class="start-copy">第十三排，有一张桌子像刚被擦过。</p>
+                        </section>
+
+                        <div class="menu-actions" aria-label="主菜单按钮">
+                            <button id="btn-start" class="primary-btn">开始</button>
+                            <button id="btn-load-start" class="ghost-btn">读档</button>
+                        </div>
+
+                        <p class="menu-legal">著作权登记申请中　软著号：登记中　健康游戏忠告：抵制不良游戏，拒绝盗版；适度游戏益脑，沉迷游戏伤身。</p>
+                    </div>
+                </div>
+
+                <div id="top-controls" class="top-controls hidden" aria-label="功能按钮">
+                    <button data-action="save">存档</button>
+                    <button data-action="load">读档</button>
+                    <button data-action="clues">线索</button>
+                    <button data-action="hint">提示</button>
+                    <button data-action="reveal">显影</button>
+                </div>
+
+                <button id="arrow-left" class="nav-arrow nav-left hidden" aria-label="切换到左侧视角">‹</button>
+                <button id="arrow-right" class="nav-arrow nav-right hidden" aria-label="切换到右侧视角">›</button>
+
+                <div id="dialogue-box" class="dialogue-box hidden">
+                    <p id="dialogue-text"></p>
+                    <span id="dialogue-next" class="dialogue-next">点击继续</span>
+                </div>
+
+                <button id="dialogue-fab" class="dialogue-fab hidden" type="button" aria-label="展开或收起对话">
+                    <span class="dialogue-fab-icon">∨</span>
+                    <span id="dialogue-fab-dot" class="dialogue-fab-dot hidden" aria-hidden="true"></span>
+                </button>
+
+                <button id="inventory-fab" class="inventory-fab hidden" type="button" aria-label="收起或展开道具栏">
+                    <span class="inventory-fab-icon">‹</span>
+                </button>
+
+                <div id="inventory-bar" class="inventory-bar hidden" aria-label="道具栏"></div>
+
+                <div id="toast-layer" class="toast-layer" aria-live="polite"></div>
+                <div id="modal-layer" class="modal-layer hidden"></div>
+            </div>
+        </section>
+        <aside id="orientation-warning">请竖起手机，教室只在竖屏中完整呈现。</aside>
+    </main>
+
+    <noscript>需要启用 JavaScript 才能进入这间教室。</noscript>
+
+    <script src="js/config.js"></script>
+    <script src="js/utils.js"></script>
+    <script src="js/loader.js"></script>
+    <script src="js/audio.js"></script>
+    <script src="js/storage.js"></script>
+    <script src="js/input.js"></script>
+    <script src="js/game.js"></script>
+</body>
+</html>
