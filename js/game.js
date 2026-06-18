@@ -57,8 +57,6 @@
             this.flashWhiteStart = null;
             this.transition = null;
             this.blackboardRevealStart = null;
-            this.blackboardSeepStart = null;
-            this.blackboardSeepLastAudio = C.Common.negativeOne;
             this.fanEventStart = null;
             this.jump = null;
             this.shake = { amplitude: C.Camera.baseShake, frames: C.Common.zero };
@@ -218,8 +216,6 @@
             this.data = window.StorageManager.createNew();
             this.data.viewId = C.InitialState.startBackdropView;
             this.blackboardRevealStart = null;
-            this.blackboardSeepStart = null;
-            this.blackboardSeepLastAudio = C.Common.negativeOne;
         }
 
         startNewGame() {
@@ -234,8 +230,6 @@
             this.jump = null;
             this.intro = null;
             this.blackboardRevealStart = null;
-            this.blackboardSeepStart = null;
-            this.blackboardSeepLastAudio = C.Common.negativeOne;
             this.flashlight.x = C.Flashlight.defaultX;
             this.flashlight.y = C.Flashlight.defaultY;
             this.flashlight.locked = false;
@@ -453,8 +447,6 @@
             if (this.introSkipButton) {
                 this.introSkipButton.classList.add('hidden');
             }
-            this.blackboardSeepStart = null;
-            this.blackboardSeepLastAudio = C.Common.negativeOne;
             this.closeModal(true);
             U.setActive(this.loadingScreen, false);
             U.setActive(this.startScreen, false);
@@ -561,6 +553,8 @@
             this.dialogue.visibleCount = chars;
             this.dialogueText.textContent = this.dialogue.chars.slice(C.Common.zero, chars).join('');
             if (chars >= this.dialogue.chars.length) {
+                // 打字完成后，用静态标色版本替换纯文本，呈现关键词高亮
+                this.dialogueText.innerHTML = this.highlightKeywords(this.dialogue.pages[this.dialogue.pageIndex]);
                 this.dialogue.complete = true;
                 this.dialogue.completedAt = time;
                 this.onDialoguePageComplete(time);
@@ -707,8 +701,27 @@
             if (hotspot.id === 'loose_brick') {
                 return !f.brickOpened;
             }
-            if (hotspot.id === 'look_up' || hotspot.id === 'fan') {
-                return !f.corridorBroadcastPlayed;
+            if (hotspot.id === 'look_up') {
+                return true;
+            }
+            if (hotspot.id === 'fan') {
+                // v1.3：吊扇改为纯氛围，始终可点（不再以 corridorBroadcastPlayed 作为消耗条件）
+                return true;
+            }
+            if (hotspot.id === 'classroom_door') {
+                // 进入走廊后始终可点
+                return this.data.sceneGroup === 'corridor';
+            }
+            if (hotspot.id === 'bulletin_board') {
+                return this.data.sceneGroup === 'corridor';
+            }
+            if (hotspot.id === 'faucet') {
+                // 锈门未开时可以交互（陷阱）
+                return !f.rustDoorOpened;
+            }
+            if (hotspot.id === 'machine_oil') {
+                // 未拾取机油时可以拾取
+                return !f.gotMachineOil && !f.rustDoorOpened;
             }
             if (hotspot.id === 'blackboard_words') {
                 return true;
@@ -806,10 +819,19 @@
             } else if (hotspot.id === 'gate_lock') {
                 this.openGate(hotspot);
             } else if (hotspot.id === 'look_up') {
-                this.changeView(C.SceneGroups.corridor[C.Common.one], true);
+                // 切到吊扇抬头视角（corridor[2] = scene_04）
+                this.changeView(C.SceneGroups.corridor[C.Common.two], true);
                 this.showDialogue(C.Text.lookUp);
             } else if (hotspot.id === 'fan') {
-                this.playCorridorEvent(hotspot);
+                this.playFanAmbience(hotspot);
+            } else if (hotspot.id === 'classroom_door') {
+                this.handleClassroomDoor(hotspot);
+            } else if (hotspot.id === 'bulletin_board') {
+                this.handleBulletinBoard(hotspot);
+            } else if (hotspot.id === 'faucet') {
+                this.handleFaucet(hotspot);
+            } else if (hotspot.id === 'machine_oil') {
+                this.handleMachineOil(hotspot);
             } else if (hotspot.id === 'enter_desks') {
                 this.changeView(C.SceneGroups.classroom[C.Common.one], true);
             } else if (hotspot.id === 'linxia_drawer') {
@@ -987,23 +1009,133 @@
             });
         }
 
-        playCorridorEvent(hotspot) {
-            if (this.data.flags.corridorBroadcastPlayed) {
+        // v1.3：吊扇改为纯氛围交互，播放音效+旁白，绝不触发进教室或场景切换
+        playFanAmbience(hotspot) {
+            // 首次触发吊扇广播演出（仅一次完整广播）
+            if (!this.data.flags.corridorBroadcastPlayed) {
+                this.data.flags.corridorBroadcastPlayed = true;
+                this.fanEventStart = U.now();
+                window.AudioManager.play('fan_creak');
+                this.startShake(C.Camera.corridorShake, C.Camera.corridorShakeFrames);
+                this.setTimer(() => window.AudioManager.play('radio_static'), C.Timing.fanRadioStaticDelayMs);
+                this.setTimer(() => window.AudioManager.play('voice_midday'), C.Timing.fanVoiceDelayMs);
+                this.setTimer(() => {
+                    this.fanEventStart = null;
+                    // 屏幕轻抖结束后显示旁白，旁白关闭后接续③林夏内心独白
+                    this.showDialogue(C.Text.fanBroadcastEnd, {
+                        onClose: () => {
+                            // ③ 林夏内心独白：广播残响戳然而止的瞬间
+                            this.showMonologue(C.Monologue.broadcast);
+                        }
+                    });
+                }, C.Timing.fanVoiceDelayMs + C.Timing.corridorPauseMs);
+                this.showDialogue(C.Text.fanAmbience);
+                this.autoSave();
+            } else {
+                // 重复点击：仅给氛围旁白+轻微音效
+                window.AudioManager.play('fan_creak');
+                this.showDialogue(C.Text.fanAmbience);
+            }
+            // 绝不触发进教室或任何场景切换
+        }
+
+        // 旧方法保留空实现（兼容可能的调用），不再使用
+        playCorridorEvent() {}
+
+        // 教室锈门交互（v1.3新增）
+        handleClassroomDoor() {
+            const f = this.data.flags;
+            if (f.rustDoorOpened) {
+                // 锈门已开：进入教室（唯一入口）
+                this.transitionToGroup('classroom', C.SceneGroups.classroom[C.Common.zero], C.Text.classroomEnter);
                 return;
             }
-            this.inputLocked = true;
-            this.fanEventStart = U.now();
-            window.AudioManager.play('fan_creak');
-            this.startShake(C.Camera.corridorShake, C.Camera.corridorShakeFrames);
-            this.setTimer(() => window.AudioManager.play('radio_static'), C.Timing.fanRadioStaticDelayMs);
-            this.setTimer(() => window.AudioManager.play('voice_midday'), C.Timing.fanVoiceDelayMs);
-            this.setTimer(() => {
-                this.inputLocked = false;
-                this.fanEventStart = null;
-                this.data.flags.corridorBroadcastPlayed = true;
-                this.spawnParticlesFromHotspot(hotspot, 'success');
-                this.transitionToGroup('classroom', C.SceneGroups.classroom[C.Common.zero], C.Text.fanEnd);
-            }, C.Timing.fanVoiceDelayMs + C.Timing.corridorPauseMs);
+            // 如果已选中机油，直接开门
+            if (this.selectedItem === 'machineOil' && this.hasItem('machineOil')) {
+                this.useMachineOilOnDoor();
+                return;
+            }
+            // 锈门未开：铺垫旁白
+            if (!f.rustDoorTried) {
+                f.rustDoorTried = true;
+                this.showDialogue(C.Text.rustDoorFirst, {
+                    onClose: () => this.showDialogue(C.Text.rustDoorHint)
+                });
+                this.autoSave();
+            } else if (this.hasItem('machineOil')) {
+                // 有机油但未选中：提示使用
+                this.showToast('从道具栏选择机油，再点击门');
+            } else {
+                this.showDialogue(C.Text.rustDoorRetry);
+            }
+        }
+
+        // 机油使用在教室门上（v1.3新增）
+        useMachineOilOnDoor() {
+            const f = this.data.flags;
+            if (!this.hasItem('machineOil')) {
+                this.showDialogue(C.Text.rustDoorRetry);
+                return;
+            }
+            // 消耗机油
+            this.data.inventory = this.data.inventory.filter((id) => id !== 'machineOil');
+            this.selectedItem = null;
+            this.data.usedItem = null;
+            f.rustDoorOpened = true;
+            f.gotMachineOil = false;
+            this.renderInventory();
+            // 反馈：生锈门锁打开音效 + 屏幕轻抖 + 亮度提升 + 飘字
+            window.AudioManager.play('lock_open');
+            this.startShake(C.Camera.correctShake, C.Camera.correctShakeFrames);
+            this.triggerFlashWhite();
+            this.spawnFloat('门开了', C.Screen.width * C.Common.half, C.Screen.height * C.Common.half, 'item');
+            this.showDialogue(C.Text.machineOilOnDoor, {
+                onClose: () => {
+                    this.showDialogue(C.Text.rustDoorOpened, {
+                        onClose: () => this.transitionToGroup('classroom', C.SceneGroups.classroom[C.Common.zero], C.Text.classroomEnter)
+                    });
+                }
+            });
+            this.autoSave();
+        }
+
+        // 旧公告栏氛围伏笔（v1.3新增）
+        handleBulletinBoard() {
+            // 弹出公告栏精绘图，纯氛围伏笔，不参与谜题
+            this.showClueDetail(C.Clues.bulletinBoard, {
+                onClose: () => {
+                    // 旁白「这一栏的名字，看不清了。」显示完毕后接续④林夏内心独白
+                    this.showDialogue(C.Text.bulletinBoardText, {
+                        onClose: () => {
+                            // ④ 林夏内心独白：点击公告栏时的愿俧初现
+                            this.showMonologue(C.Monologue.bulletinBoard);
+                        }
+                    });
+                }
+            });
+        }
+
+        // 水龙头陷阱（v1.3新增）
+        handleFaucet() {
+            const f = this.data.flags;
+            if (!f.usedWaterOnDoor) {
+                f.usedWaterOnDoor = true;
+                this.autoSave();
+            }
+            this.showDialogue(f.usedWaterOnDoor && this.data.flags.rustDoorTried ?
+                C.Text.faucetTrapAgain : C.Text.faucetTrap
+            );
+        }
+
+        // 机油拾取（v1.3新增）
+        handleMachineOil(hotspot) {
+            if (this.data.flags.gotMachineOil || this.hasItem('machineOil')) {
+                return;
+            }
+            this.data.flags.gotMachineOil = true;
+            this.pickupItem('machineOil', hotspot);
+            this.showDialogue(C.Text.machineOilPicked);
+            this.autoSave();
         }
 
         openLinxiaDrawer(hotspot) {
@@ -1017,7 +1149,13 @@
             this.spawnParticlesFromHotspot(hotspot, 'success');
             this.addItem('friendshipBracelet');
             this.addItem('tapeA');
-            this.showDialogue(C.Text.linxiaDrawer);
+            // 道具飘字显示后，旁白关闭时接续⑥林夏内心独白（最强峰值）
+            this.showDialogue(C.Text.linxiaDrawer, {
+                onClose: () => {
+                    // ⑥ 林夏内心独白：摸到半条友情手链时，最强峰值
+                    this.showMonologue(C.Monologue.linxiaDrawer);
+                }
+            });
             this.autoSave();
         }
 
@@ -1043,15 +1181,12 @@
 
         triggerBlackboardWords() {
             if (this.data.flags.blackboardWordsSeen) {
-                this.focusBlackboardSeep();
                 this.maybeTeachTimetableRule();
                 return;
             }
             const now = U.now();
             this.data.flags.blackboardWordsSeen = true;
             this.blackboardRevealStart = now;
-            this.blackboardSeepStart = now;
-            this.playBlackboardDrip(now);
             this.maybeTeachTimetableRule();
             this.autoSave();
         }
@@ -1070,22 +1205,7 @@
             this.autoSave();
         }
 
-        focusBlackboardSeep() {
-            if (this.data.viewId !== C.SceneGroups.classroom[C.Common.two]) {
-                return;
-            }
-            const now = U.now();
-            this.blackboardSeepStart = now;
-            this.playBlackboardDrip(now);
-        }
 
-        playBlackboardDrip(now) {
-            if (this.blackboardSeepLastAudio !== C.Common.negativeOne && now - this.blackboardSeepLastAudio < C.Timing.blackboardSeepAudioCooldownMs) {
-                return;
-            }
-            this.blackboardSeepLastAudio = now;
-            window.AudioManager.play('blackboard_drip');
-        }
 
         collectClue(clueId, dialogueText, hotspot, options) {
             const opts = options || {};
@@ -1131,6 +1251,10 @@
             this.data.sceneGroup = group;
             this.data.viewId = viewId;
             this.data.state = group === 'corridor' ? 'CORRIDOR' : (group === 'classroom' ? 'CLASSROOM_ENTRY' : 'LOBBY');
+            // 进入走廊时预设标志，防止 handleViewArrival 重复触发走廊旁白
+            if (group === 'corridor') {
+                this.data.flags.corridorFirstEntered = true;
+            }
             this.transition = { start: U.now(), duration: C.Timing.fadeMs };
             this.autoSave();
             this.setTimer(() => {
@@ -1176,12 +1300,21 @@
                             this.triggerBlackboardWords();
                         }
                     }, C.Timing.fadeMs);
-                } else {
-                    this.focusBlackboardSeep();
                 }
             }
-            if (viewId === C.SceneGroups.corridor[C.Common.one] && !this.data.flags.corridorBroadcastPlayed) {
+            if (viewId === C.SceneGroups.corridor[C.Common.two] && !this.data.flags.corridorBroadcastPlayed) {
                 window.AudioManager.play('fan_creak');
+            }
+            // 锈门谜题先教学：首次进入走廊纵深，如果锈门未尝试，自动弹出走廊第一句旁白
+            if (viewId === C.SceneGroups.corridor[C.Common.zero] && !this.data.flags.rustDoorTried && this.data.sceneGroup === 'corridor') {
+                if (!this.data.flags.corridorFirstEntered) {
+                    this.data.flags.corridorFirstEntered = true;
+                    this.setTimer(() => {
+                        if (this.data.viewId === C.SceneGroups.corridor[C.Common.zero] && !this.dialogue) {
+                            this.showDialogue(C.Text.corridorEnter);
+                        }
+                    }, C.Timing.fadeMs);
+                }
             }
             // ① 先教学：首次进入教室相关视角，给座位推理的方向引导（只指方向不报答案）
             if (this.data.sceneGroup === 'classroom' && !this.data.flags.seatIntroSeen && !this.data.flags.seatSolved) {
@@ -1489,7 +1622,14 @@
                         this.spawnParticles(C.Screen.width * C.Common.half, C.Screen.height * C.Common.half, 'success');
                         this.startShake(C.Camera.correctShake, C.Camera.correctShakeFrames);
                         this.closeModal(true);
-                        this.showDialogue(C.Text.seatSolvedLine, { onClose: () => this.showPasswordModal() });
+                        this.showDialogue(C.Text.seatSolvedLine, {
+                            onClose: () => {
+                                // ⑤ 林夏内心独白：锁定第十三排空座位时
+                                this.showMonologue(C.Monologue.seatSolved, {
+                                    onClose: () => this.showPasswordModal()
+                                });
+                            }
+                        });
                         this.autoSave();
                     } else {
                         this.startShake(C.Camera.invalidShake, C.Camera.invalidShakeFrames);
@@ -1519,15 +1659,16 @@
             this.data.state = 'PASSWORD_PUZZLE';
             const panel = this.createModalPanel('三位密码锁');
             const clue = document.createElement('p');
-            clue.textContent = '黑板旁写着：“第一节，别迟到”。';
+            clue.textContent = '苏晚的抽屉，锁着三位数字。';
             panel.appendChild(clue);
-            const subjectList = document.createElement('ul');
-            C.Password.subjects.forEach((subject) => {
-                const li = document.createElement('li');
-                li.textContent = `${subject.date}：${subject.name} = ${subject.code}`;
-                subjectList.appendChild(li);
-            });
-            panel.appendChild(subjectList);
+            const hint1 = document.createElement('p');
+            hint1.className = 'password-hint';
+            hint1.textContent = '一日之计在于晨……每天第一节，上的是什么？';
+            panel.appendChild(hint1);
+            const hint2 = document.createElement('p');
+            hint2.className = 'password-hint';
+            hint2.textContent = '书脊上的册数，或许记得答案。';
+            panel.appendChild(hint2);
             const digits = C.Password.initial.slice();
             const answerDigits = Array.from(C.Password.answer).map((ch) => Number(ch));
             const digitWrap = document.createElement('div');
@@ -1615,9 +1756,20 @@
             }
             this.data.flags.noteRead = true;
             this.addClue('waterNote', true);
+            // 纸条内容显示完毕后，先触发⑧林夏内心独白（崩溃前的静），再约200ms后触发主Jump
+            const monologueDelay = C.Monologue ? C.Monologue.waterNoteDelayMs : 200;
             this.showDialogue(C.Text.waterNote, {
                 ghost: true,
-                onClose: () => this.startMainJump()
+                onClose: () => {
+                    // ⑧ 林夏内心独白：读完纸条、关窗砰然触发前一瞬（崩溃前的静，气音效果）
+                    this.showMonologue(C.Monologue.waterNote, {
+                        whisper: true,
+                        onClose: () => {
+                            // 独白关闭后约 200ms 触发主 Jump（windows_slam 音效起点）
+                            this.setTimer(() => this.startMainJump(), monologueDelay);
+                        }
+                    });
+                }
             });
             this.spawnParticles(C.Screen.width * C.Common.half, C.UI.dialogY, 'paper');
             this.autoSave();
@@ -1638,7 +1790,8 @@
                 this.flashlight.radius = C.Flashlight.lockedRadius;
             }
             const start = U.now();
-            this.jump = { start, dripAccumulator: C.Common.zero };
+            // jumpPhase: 'emerge'（苏晚浮现）→ 'jumpscare'（突脸爆发）→ 'black'（黑屏）
+            this.jump = { start, dripAccumulator: C.Common.zero, jumpscareTriggered: false };
             this.updateDialogueFab();
             window.AudioManager.play('windows_slam');
             window.AudioManager.setVolume('bgm_low', C.Audio.jumpBgmVolume);
@@ -1651,6 +1804,19 @@
                     navigator.vibrate(C.Jump.vibratePattern);
                 }
             }, C.Timing.jumpShakeMs);
+            // 突脸爆发：2550ms 触发，剧烈抖动 + 广播音量拉至峰值 + 移动端震动
+            this.setTimer(() => {
+                if (!this.jump) {
+                    return;
+                }
+                this.jump.jumpscareTriggered = true;
+                this.startShake(C.Camera.jumpShake + C.Common.two, C.Camera.jumpShakeFrames * C.Common.three);
+                window.AudioManager.setVolume('radio_static', C.Audio.sfxVolume);
+                window.AudioManager.play('radio_static');
+                if (navigator.vibrate) {
+                    navigator.vibrate(C.Jump.jumpscareVibratePattern);
+                }
+            }, C.Timing.jumpJumpscareMs);
             if (this.isJumpSpotlightEnabled()) {
                 this.setTimer(() => {
                     this.flashlight.locked = false;
@@ -1692,6 +1858,14 @@
             actions.appendChild(U.createButton('回看线索', '', () => this.showClueBook(true)));
             panel.appendChild(actions);
             this.openModal(panel);
+            // ⑨ 林夏内心独白：结算画面淡入后 600ms 触发（余韵+第二章钉子）
+            const endingDelay = C.Monologue ? C.Monologue.endingDelayMs : 600;
+            this.setTimer(() => {
+                // 需要确认当前仍在结算模态中
+                if (this.data.state === 'ENDING') {
+                    this.showMonologue(C.Monologue.ending);
+                }
+            }, endingDelay);
         }
 
         showHint() {
@@ -1718,6 +1892,42 @@
                 return 'password';
             }
             return 'classroom';
+        }
+
+        // 关键词静态标色：将文本中的关键字/数字包裹为带颜色 span，返回 HTML 字符串。
+        // 仅标真正关键的字词，避免大片标色影响阅读；不闪烁、不动画，纯静态。
+        highlightKeywords(text) {
+            // 转义 HTML 特殊字符，防止 XSS
+            const escaped = text
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;');
+            // 锈红标色：重要线索词、关键人名
+            const rustWords = [
+                '苏晚', '夏夏', '林夏',
+                '暗红色圈住', '暗红色',
+                '松开手', '受伤',
+                '水渍', '磁带'
+            ];
+            // 暖黄标色：关键数字与规则性线索
+            const amberWords = [
+                '13号', '第十三排', '十三排', '231',
+                '第一节', '一日之计', '书脊', '册数'
+            ];
+            let result = escaped;
+            // 先标锈红（优先级高）
+            rustWords.forEach(function(word) {
+                const safeWord = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                result = result.split(word).join('<span class="kw-rust">' + word + '</span>');
+            });
+            // 再标暖黄
+            amberWords.forEach(function(word) {
+                // 只替换不在已有 span 内的（简单判断：不含 class= 前缀）
+                if (result.indexOf('<span class="kw-rust">' + word) === -1) {
+                    result = result.split(word).join('<span class="kw-amber">' + word + '</span>');
+                }
+            });
+            return result;
         }
 
         paginateDialogue(text) {
@@ -1749,9 +1959,26 @@
             return pages;
         }
 
+        // 林夏内心独白：复用对话框组件，字色冷青灰 #C8D4D0，字速 22字/秒
+        // opts.whisper=true 时展现气音效果（透明度 0.7 + 1px轻微抖动）
+        showMonologue(text, opts) {
+            const options = opts || {};
+            this.showDialogue(text, {
+                ghost: false,
+                monologue: true,
+                whisper: Boolean(options.whisper),
+                onClose: options.onClose || null
+            });
+        }
+
         showDialogue(text, options) {
             const opts = options || {};
             const pages = this.paginateDialogue(text);
+            // monologue 模式：字速 22字/秒，对话框加 monologue 类名（字色冷青灰）
+            let cps = opts.ghost ? C.Timing.typeGhostCps : C.Timing.typeNormalCps;
+            if (opts.monologue) {
+                cps = C.Monologue ? C.Monologue.cps : 22;
+            }
             this.dialogue = {
                 text,
                 pages,
@@ -1759,13 +1986,17 @@
                 chars: Array.from(pages[C.Common.zero]),
                 visibleCount: C.Common.zero,
                 start: U.now(),
-                cps: opts.ghost ? C.Timing.typeGhostCps : C.Timing.typeNormalCps,
+                cps,
                 ghost: Boolean(opts.ghost),
+                monologue: Boolean(opts.monologue),
+                whisper: Boolean(opts.whisper),
                 complete: false,
                 onClose: opts.onClose || null
             };
             this.dialogueText.textContent = '';
             this.dialogueBox.classList.toggle('ghost', Boolean(opts.ghost));
+            this.dialogueBox.classList.toggle('monologue', Boolean(opts.monologue));
+            this.dialogueBox.classList.toggle('monologue-whisper', Boolean(opts.monologue && opts.whisper));
             this.dialogueBox.classList.remove('can-advance');
             // 有新旁白需要播放（如点击交互物）时，自动展开旁白文本框
             this.dialogueCollapsed = false;
@@ -1802,7 +2033,7 @@
             if (!this.dialogue.complete) {
                 this.dialogue.complete = true;
                 this.dialogue.visibleCount = this.dialogue.chars.length;
-                this.dialogueText.textContent = this.dialogue.pages[this.dialogue.pageIndex];
+                this.dialogueText.innerHTML = this.highlightKeywords(this.dialogue.pages[this.dialogue.pageIndex]);
                 this.dialogue.completedAt = U.now();
                 this.onDialoguePageComplete(U.now());
                 return;
@@ -1823,7 +2054,7 @@
             // 注意：不重置 dialogueCollapsed —— 玩家的收起/展开意图被记忆并保持
             this.dialogueHasUnread = false;
             U.addClass(this.dialogueBox, 'hidden');
-            this.dialogueBox.classList.remove('ghost', 'collapsed', 'can-advance');
+            this.dialogueBox.classList.remove('ghost', 'monologue', 'monologue-whisper', 'collapsed', 'can-advance');
             this.releaseInventory();
             this.updateDialogueFab();
             if (onClose) {
@@ -1908,7 +2139,7 @@
             this.dialogue = null;
             this.dialogueHasUnread = false;
             U.addClass(this.dialogueBox, 'hidden');
-            this.dialogueBox.classList.remove('ghost', 'collapsed', 'can-advance');
+            this.dialogueBox.classList.remove('ghost', 'monologue', 'monologue-whisper', 'collapsed', 'can-advance');
             this.releaseInventory();
             this.updateDialogueFab();
         }
@@ -2154,118 +2385,15 @@
         drawSceneReadableOverlays(ctx, time) {
             // 线索美术化：点名册/值日表/课程表/标语等线索信息已「画在物件里」，
             // 由背景图与点击弹出的精绘特写承载，不再用系统文字面板覆盖在黑板上。
-            if (this.data.viewId === C.SceneGroups.classroom[C.Common.two]) {
-                this.drawBlackboardSeep(ctx, time);
-            }
-            if (this.data.viewId === C.SceneGroups.corridor[C.Common.one]) {
+            if (this.data.viewId === C.SceneGroups.corridor[C.Common.two]) {
                 this.drawFanShadow(ctx, time);
             }
         }
 
-        getBlackboardSeepProgress(time) {
-            if (!this.data.flags.blackboardWordsSeen && !this.blackboardRevealStart) {
-                return C.Common.zero;
-            }
-            if (this.blackboardSeepStart !== null) {
-                const elapsed = time - this.blackboardSeepStart;
-                if (elapsed <= C.Timing.blackboardSeepMs) {
-                    return U.clamp(elapsed / C.Timing.blackboardSeepMs, C.Common.zero, C.Common.one);
-                }
-            }
-            const loop = (time % C.BlackboardSeep.idleLoopMs) / C.BlackboardSeep.idleLoopMs;
-            return C.BlackboardSeep.idleAlphaScale * (C.Common.half + Math.sin(loop * C.Common.fullCircle) * C.Common.half);
-        }
 
-        drawBlackboardSeep(ctx, time) {
-            const progress = this.getBlackboardSeepProgress(time);
-            if (progress <= C.Common.zero) {
-                return;
-            }
-            const cfg = C.BlackboardSeep;
-            ctx.save();
-            ctx.beginPath();
-            ctx.rect(cfg.clip.x, cfg.clip.y, cfg.clip.w, cfg.clip.h);
-            ctx.clip();
-            ctx.globalCompositeOperation = 'screen';
-            this.drawBlackboardWetBloom(ctx, progress, time);
-            ctx.globalCompositeOperation = 'multiply';
-            this.drawBlackboardDarkTears(ctx, progress, time);
-            ctx.globalCompositeOperation = 'source-over';
-            this.drawBlackboardWaterGlints(ctx, progress, time);
-            ctx.restore();
-        }
 
-        drawBlackboardWetBloom(ctx, progress, time) {
-            C.BlackboardSeep.paths.forEach((path, index) => {
-                const delay = path.delay / C.BlackboardSeep.delayScale;
-                const local = U.clamp((progress - delay) / (C.Common.one - delay), C.Common.zero, C.Common.one);
-                if (local <= C.Common.zero) {
-                    return;
-                }
-                const wave = C.Common.half + Math.sin(time / C.Common.msToSeconds * (C.Common.one + index / C.Common.nine)) * C.Common.half;
-                const alpha = C.BlackboardSeep.bloomAlpha * local * (C.Common.half + wave * C.Common.half);
-                const x = path.x + Math.sin(index * C.Common.two) * C.Common.five;
-                const y = path.y + path.len * local * C.Common.half;
-                const glow = ctx.createRadialGradient(x, y, C.Common.zero, x, y, path.len * C.Common.half);
-                glow.addColorStop(C.Common.zero, U.alphaColor(C.Render.rgbaBlackboardWetBloom, alpha));
-                glow.addColorStop(C.Common.one, U.alphaColor(C.Render.rgbaBlackboardWetBloom, C.Common.zero));
-                ctx.fillStyle = glow;
-                ctx.fillRect(x - path.len * C.Common.half, y - path.len * C.Common.half, path.len, path.len);
-            });
-        }
 
-        drawBlackboardDarkTears(ctx, progress, time) {
-            C.BlackboardSeep.paths.forEach((path, index) => {
-                const delay = path.delay / C.BlackboardSeep.delayScale;
-                const local = U.clamp((progress - delay) / (C.Common.one - delay), C.Common.zero, C.Common.one);
-                if (local <= C.Common.zero) {
-                    return;
-                }
-                const length = path.len * local;
-                const wobble = Math.sin(time / C.Common.msToSeconds * (C.Common.one + C.Common.one / C.Common.five + index / C.Common.fourteen)) * C.Common.five;
-                const endX = path.x + path.drift * local + wobble;
-                const endY = path.y + length;
-                ctx.save();
-                ctx.lineCap = 'round';
-                ctx.lineJoin = 'round';
-                ctx.strokeStyle = U.alphaColor(C.Render.rgbaBlackboardSeepDark, C.BlackboardSeep.darkAlpha * local);
-                ctx.lineWidth = path.width + C.Common.three;
-                ctx.beginPath();
-                ctx.moveTo(path.x, path.y);
-                ctx.bezierCurveTo(path.x - path.drift * C.Common.quarter, path.y + length / C.Common.three, endX + path.drift / C.Common.five, path.y + length * C.Common.two / C.Common.three, endX, endY);
-                ctx.stroke();
-                ctx.restore();
-            });
-        }
 
-        drawBlackboardWaterGlints(ctx, progress, time) {
-            C.BlackboardSeep.paths.forEach((path, index) => {
-                const delay = path.delay / C.BlackboardSeep.delayScale;
-                const local = U.clamp((progress - delay) / (C.Common.one - delay), C.Common.zero, C.Common.one);
-                if (local <= C.Common.zero) {
-                    return;
-                }
-                const length = path.len * local;
-                const wobble = Math.sin(time / C.Common.msToSeconds * (C.Common.one + C.Common.half - C.Common.one / C.Common.twenty + index / C.Common.eleven)) * C.Common.four;
-                const endX = path.x + path.drift * local + wobble;
-                const endY = path.y + length;
-                ctx.save();
-                ctx.lineCap = 'round';
-                ctx.lineJoin = 'round';
-                ctx.strokeStyle = U.alphaColor(C.Render.rgbaBlackboardSeep, C.BlackboardSeep.lineAlpha * local);
-                ctx.lineWidth = Math.max(C.Common.one, path.width - C.Common.one);
-                ctx.beginPath();
-                ctx.moveTo(path.x + C.Common.one, path.y + C.Common.two);
-                ctx.bezierCurveTo(path.x - path.drift / C.Common.five, path.y + length / C.Common.three, endX + path.drift / C.Common.six, path.y + length * C.Common.two / C.Common.three, endX, endY);
-                ctx.stroke();
-                ctx.fillStyle = U.alphaColor(C.Render.rgbaBlackboardSeep, C.BlackboardSeep.dropAlpha * local);
-                const drop = C.Common.five + path.width * C.Common.two;
-                ctx.beginPath();
-                ctx.ellipse(endX, endY + drop * C.Common.half, drop * C.Common.half, drop, C.Common.zero, C.Common.zero, C.Common.fullCircle);
-                ctx.fill();
-                ctx.restore();
-            });
-        }
 
         drawFanShadow(ctx, time) {
             const angle = (time / C.Common.msToSeconds) * C.Feedback.fanRotateDegPerSecond * C.Common.radiansPerDegree;
@@ -2331,29 +2459,116 @@
 
         drawJump(ctx, time) {
             const elapsed = time - this.jump.start;
-            const blackAlpha = U.clamp(elapsed / C.Timing.jumpBlackMs, C.Common.zero, C.Common.one);
             ctx.save();
+
+            // 0~180ms：黑幕渐入
+            const blackAlpha = U.clamp(elapsed / C.Timing.jumpBlackMs, C.Common.zero, C.Common.one);
             ctx.fillStyle = U.alphaColor(C.Render.rgbaBlackTemplate, blackAlpha);
             ctx.fillRect(C.Common.zero, C.Common.zero, C.Screen.width, C.Screen.height);
-            if (elapsed >= C.Timing.jumpLightMs && elapsed < C.Timing.jumpOffMs) {
-                const ghostProgress = U.clamp((elapsed - C.Timing.jumpGhostStartMs) / (C.Timing.jumpGhostEndMs - C.Timing.jumpGhostStartMs), C.Common.zero, C.Common.one);
-                const ghostY = U.lerp(C.Jump.ghostStartY, C.Jump.ghostEndY, ghostProgress);
-                const ghostAlpha = ghostProgress * C.Jump.ghostAlphaMax;
-                if (!this.isJumpSpotlightEnabled()) {
-                    this.drawJumpBacklight(ctx, ghostY, ghostProgress);
+
+            // 突脸黑屏阶段（3050ms 后急速黑屏）
+            if (elapsed >= C.Timing.jumpJumpscareBlackMs) {
+                const blackoutProgress = U.clamp((elapsed - C.Timing.jumpJumpscareBlackMs) / C.Common.eighty, C.Common.zero, C.Common.one);
+                ctx.fillStyle = U.alphaColor(C.Render.rgbaBlackTemplate, blackoutProgress);
+                ctx.fillRect(C.Common.zero, C.Common.zero, C.Screen.width, C.Screen.height);
+                ctx.restore();
+                return;
+            }
+
+            // 突脸爆发阶段（2550ms ~ 3050ms）：suwan_emerge_pose 整体等比放大推近
+            if (elapsed >= C.Timing.jumpJumpscareMs) {
+                const jProgress = U.clamp(
+                    (elapsed - C.Timing.jumpJumpscareMs) / C.Timing.jumpJumpscareDurationMs,
+                    C.Common.zero, C.Common.one
+                );
+                const jScale = U.lerp(C.Jump.jumpscareScaleFrom, C.Jump.jumpscareScaleTo, jProgress);
+                const jAlpha = U.clamp(jProgress * C.Common.three, C.Common.zero, C.Jump.jumpscareAlphaMax);
+                // 先淡出浮现图（快速）
+                const emergeOutAlpha = U.clamp(C.Common.one - jProgress * C.Common.four, C.Common.zero, C.Common.one);
+                if (emergeOutAlpha > C.Common.zero) {
+                    this.drawSuwanEmerge(ctx, C.Common.one, emergeOutAlpha);
                 }
-                ctx.globalAlpha = ghostAlpha;
-                window.Loader.drawImage(ctx, 'suwan_silhouette', C.Jump.ghostX, ghostY, C.Jump.ghostW, C.Jump.ghostH);
-                ctx.globalAlpha = C.Common.maxAlpha;
+                // 突脸图：等比 contain 缩放，以画面中心为锚点整体放大
+                ctx.save();
+                ctx.globalAlpha = jAlpha;
+                this.drawSuwanJumpscare(ctx, jScale);
+                ctx.restore();
+                ctx.restore();
+                return;
+            }
+
+            // 900ms ~ 2550ms：苏晚浮现演出（suwan_emerge_pose）
+            if (elapsed >= C.Timing.jumpGhostStartMs && elapsed < C.Timing.jumpJumpscareMs) {
+                const emergeProgress = U.clamp(
+                    (elapsed - C.Timing.jumpGhostStartMs) / (C.Timing.jumpGhostEndMs - C.Timing.jumpGhostStartMs),
+                    C.Common.zero, C.Common.one
+                );
+                const emergeAlpha = emergeProgress * C.Jump.emergeAlphaMax;
+                if (!this.isJumpSpotlightEnabled()) {
+                    // 背光效果
+                    const ghostY = U.lerp(C.Jump.emergeStartY, C.Jump.emergeEndY, emergeProgress);
+                    this.drawJumpBacklight(ctx, ghostY, emergeProgress);
+                }
+                this.drawSuwanEmerge(ctx, emergeProgress, emergeAlpha);
                 if (this.isJumpSpotlightEnabled()) {
                     this.drawFlashlight(ctx, C.Flashlight.spotlightX, C.Flashlight.spotlightY, C.Flashlight.lockedRadius, C.Render.lockLightAlpha);
                 }
             }
-            if (elapsed >= C.Timing.jumpOffMs) {
-                ctx.fillStyle = C.Colors.black;
-                ctx.fillRect(C.Common.zero, C.Common.zero, C.Screen.width, C.Screen.height);
-            }
+
             ctx.restore();
+        }
+
+        // 绘制苏晚浮现立绘（suwan_emerge_pose）：等比 contain，从下方纵向浮现
+        drawSuwanEmerge(ctx, progress, alpha) {
+            const img = window.Loader.getImage('suwan_emerge_pose');
+            if (!img || !img.naturalWidth || !img.naturalHeight) {
+                // 兜底：绘制剪影
+                const ghostY = U.lerp(C.Jump.emergeStartY, C.Jump.emergeEndY, progress);
+                ctx.save();
+                ctx.globalAlpha = alpha;
+                window.Loader.drawImage(ctx, 'suwan_silhouette', C.Jump.ghostX, ghostY, C.Jump.ghostW, C.Jump.ghostH);
+                ctx.restore();
+                return;
+            }
+            // 等比 contain：以画面宽为基准，保持原始宽高比
+            const targetW = C.Screen.width;
+            const targetH = C.Screen.height;
+            const srcW = img.naturalWidth;
+            const srcH = img.naturalHeight;
+            const scale = Math.min(targetW / srcW, targetH / srcH);
+            const drawW = srcW * scale;
+            const drawH = srcH * scale;
+            const drawX = (targetW - drawW) * C.Common.half;
+            // 纵向浮现：Y 从 emergeStartY 向上移动到 emergeEndY（以立绘顶部为参考）
+            const topY = U.lerp(C.Jump.emergeStartY, C.Jump.emergeEndY, progress);
+            ctx.save();
+            ctx.globalAlpha = alpha;
+            ctx.drawImage(img, drawX, topY, drawW, drawH);
+            ctx.restore();
+        }
+
+        // 绘制突脸爆发段：使用苏晚低头坐姿图（suwan_emerge_pose）整体等比放大推近
+        // 不使用任何狰狞/惊悚脸特写素材，靠「突然逼近+音效+静默打破」营造压迫
+        drawSuwanJumpscare(ctx, scale) {
+            const img = window.Loader.getImage('suwan_emerge_pose');
+            if (!img || !img.naturalWidth || !img.naturalHeight) {
+                // 兜底：深色压迫遮罩，不使用红色或血腥元素
+                ctx.save();
+                ctx.fillStyle = 'rgba(8,14,18,0.92)';
+                ctx.fillRect(C.Common.zero, C.Common.zero, C.Screen.width, C.Screen.height);
+                ctx.restore();
+                return;
+            }
+            // 等比 contain：计算 1.0 倍时的绘制尺寸（铺满画面）
+            const srcW = img.naturalWidth;
+            const srcH = img.naturalHeight;
+            const baseScale = Math.min(C.Screen.width / srcW, C.Screen.height / srcH);
+            const drawW = srcW * baseScale * scale;
+            const drawH = srcH * baseScale * scale;
+            // 以画面中心为锚点整体等比放大，不横向压扁
+            const drawX = (C.Screen.width - drawW) * C.Common.half;
+            const drawY = (C.Screen.height - drawH) * C.Common.half;
+            ctx.drawImage(img, drawX, drawY, drawW, drawH);
         }
 
         drawJumpBacklight(ctx, ghostY, progress) {

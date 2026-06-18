@@ -500,8 +500,8 @@ button:disabled {
 .dialogue-box p {
     margin: 0;
     color: rgba(242, 239, 230, 0.94);
-    /* 正文级字号：竖屏每行约 15~20 字、单屏 3~4 行 */
-    font-size: calc(25 * var(--upx));
+    /* 正文级字号：竖屏每行约 13~17 字、单屏 3~4 行 */
+    font-size: calc(28 * var(--upx));
     line-height: 1.66;
     letter-spacing: 0.04em;
     word-break: break-word;
@@ -514,6 +514,39 @@ button:disabled {
     font-family: "STKaiti", "KaiTi", "FangSong", "Noto Serif SC", serif;
     animation: ghostText 900ms steps(2, end) infinite;
 }
+
+/* 林夏内心独白：冷青灰字色 #C8D4D0，区别于普通旁白白色 */
+.dialogue-box.monologue p {
+    color: var(--moon);
+    font-style: italic;
+    letter-spacing: 0.06em;
+}
+
+/* 气音效果：透明度降低 + 1px 轻微抖动（⑧纸条后的崩溃前静） */
+.dialogue-box.monologue-whisper p {
+    color: var(--moon);
+    font-style: italic;
+    opacity: 0.7;
+    animation: monologueWhisper 1400ms steps(2, end) infinite;
+}
+
+@keyframes monologueWhisper {
+    0%, 100% { transform: translate(0, 0); opacity: 0.7; }
+    50% { transform: translate(0, 1px); opacity: 0.78; }
+}
+
+/* 关键词静态标色：重要线索/数字用暗哑锈红，其余文字保持正常白色 */
+.dialogue-box p .kw-rust {
+    color: #9E2B2B;
+    font-weight: 500;
+}
+
+/* 次要关键词标黄（可选用于数字/时间等） */
+.dialogue-box p .kw-amber {
+    color: rgba(232, 200, 122, 0.95);
+    font-weight: 500;
+}
+
 
 /* “点击继续” 小提示 */
 .dialogue-next {
@@ -1020,10 +1053,8 @@ button:disabled {
 @keyframes ghostText {
     0%, 100% {
         transform: translate(0, 0);
-        color: var(--moon);
     }
     50% {
         transform: translate(1px, -1px);
-        color: rgba(158, 43, 43, 0.82);
     }
 }

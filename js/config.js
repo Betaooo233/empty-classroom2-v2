@@ -2,7 +2,7 @@
     'use strict';
 
     const CONFIG = {
-        Version: '0.2.17',
+        Version: '0.2.26',
         SaveKey: 'emptyClassroom.save.v1',
         Screen: {
             width: 1080,
@@ -40,6 +40,7 @@
             fifty: 50,
             sixty: 60,
             ninety: 90,
+            eighty: 80,
             hundred: 100,
             half: 0.5,
             fullCircle: Math.PI * 2,
@@ -79,8 +80,6 @@
             hotspotPulseMs: 1200,
             autoSaveNoticeMs: 900,
             blackboardRevealMs: 2200,
-            blackboardSeepMs: 6200,
-            blackboardSeepAudioCooldownMs: 2400,
             corridorPauseMs: 800,
             fanRadioStaticDelayMs: 1400,
             fanVoiceDelayMs: 2000,
@@ -92,11 +91,15 @@
             jumpVoiceMs: 950,
             jumpShakeMs: 1200,
             jumpOffMs: 2600,
+            // 突脸演出：2550ms 触发，持续约 400ms，3050ms 黑屏，3400ms 结算
+            jumpJumpscareMs: 2550,
+            jumpJumpscareDurationMs: 400,
+            jumpJumpscareBlackMs: 3050,
             jumpEndingMs: 3400,
             typeNormalCps: 28,
             typeGhostCps: 16,
             dialogueAutoCollapseMs: 2500,
-            dialoguePageChars: 56,
+            dialoguePageChars: 48,
             keyClueupCloseMs: 1000,
             flashWhiteMs: 120,
             digitGlowMs: 120,
@@ -260,9 +263,6 @@
             rgbaMoonSceneTitle: 'rgba(200,212,208,0.55)',
             rgbaMoonEnding: 'rgba(200,212,208,0.72)',
             rgbaMoonDrip: 'rgba(200,212,208,0.45)',
-            rgbaBlackboardSeep: 'rgba(176,204,200,{alpha})',
-            rgbaBlackboardSeepDark: 'rgba(8,18,18,{alpha})',
-            rgbaBlackboardWetBloom: 'rgba(196,215,211,{alpha})',
             rgbaPaperPanel: 'rgba(19,24,23,0.74)',
             rgbaLightStroke: 'rgba(232,200,122,0.36)',
             rgbaLightWarmMid: 'rgba(232,200,122,0.16)',
@@ -313,33 +313,9 @@
                 lock_open: { path: 'assets/audio/sfx_rusty_lock_open.mp3', type: 'sfx', volume: 0.9, loop: false },
                 rebar_pry: { path: 'assets/audio/sfx_rebar_pry_brick.mp3', type: 'sfx', volume: 0.86, loop: false },
                 hotspot_click: { path: 'assets/audio/sfx_hotspot_click.mp3', type: 'sfx', volume: 0.58, loop: false },
-                blackboard_drip: { path: 'assets/audio/sfx_blackboard_drip.mp3', type: 'sfx', volume: 0.24, loop: false },
                 voice_midday: { path: 'assets/audio/voice_midday_broadcast.mp3', type: 'voice', volume: 0.88, loop: false },
                 voice_return: { path: 'assets/audio/voice_suwan_returned_xiaxia.mp3', type: 'voice', volume: 0.92, loop: false }
             }
-        },
-        BlackboardSeep: {
-            clip: { x: 200, y: 690, w: 740, h: 500 },
-            lineAlpha: 0.58,
-            darkAlpha: 0.34,
-            dropAlpha: 0.76,
-            bloomAlpha: 0.16,
-            idleAlphaScale: 0.36,
-            delayScale: 100,
-            idleLoopMs: 7800,
-            paths: [
-                { x: 246, y: 836, len: 190, drift: -12, width: 3, delay: 2 },
-                { x: 306, y: 812, len: 145, drift: 9, width: 2, delay: 11 },
-                { x: 365, y: 850, len: 220, drift: -8, width: 4, delay: 20 },
-                { x: 447, y: 835, len: 170, drift: 14, width: 3, delay: 28 },
-                { x: 535, y: 862, len: 238, drift: -16, width: 3, delay: 35 },
-                { x: 628, y: 872, len: 210, drift: 10, width: 4, delay: 44 },
-                { x: 736, y: 858, len: 158, drift: -7, width: 2, delay: 53 },
-                { x: 426, y: 1002, len: 150, drift: -10, width: 3, delay: 18 },
-                { x: 520, y: 988, len: 205, drift: 13, width: 4, delay: 31 },
-                { x: 610, y: 996, len: 180, drift: -9, width: 3, delay: 43 },
-                { x: 700, y: 984, len: 132, drift: 8, width: 2, delay: 56 }
-            ]
         },
         Images: {
             cover_main_menu: 'assets/images/cover_main_menu.png',
@@ -348,9 +324,10 @@
             intro_03_school_rain: 'assets/images/intro_03_school_rain.png',
             scene_01_lobby_gate: 'assets/images/scene_01_lobby_gate.png',
             scene_02_lobby_sidewall: 'assets/images/scene_02_lobby_sidewall.png',
-            scene_03_corridor_depth: 'assets/images/scene_03_corridor_depth.png',
+            scene_03_corridor_depth: 'assets/images/scene_03_corridor_depth_v2.png',
+            scene_03b_corridor_tools_corner: 'assets/images/scene_03b_corridor_tools_corner.png',
             scene_04_corridor_fan_up: 'assets/images/scene_04_corridor_fan_up.png',
-            scene_05_classroom_entry: 'assets/images/scene_05_classroom_entry.png',
+            scene_05_classroom_entry: 'assets/images/scene_05_classroom_entry_v2.png',
             scene_06_double_desks_close: 'assets/images/scene_06_double_desks_close.png',
             scene_07_blackboard_close: 'assets/images/scene_07_blackboard_close.png',
             scene_08_podium_door: 'assets/images/scene_08_podium_door.png',
@@ -363,15 +340,21 @@
             item_tapeA: 'assets/images/item_icons_transparent_transparent_cut_4.png',
             item_waterNote: 'assets/images/item_icons_transparent_transparent_cut_5.png',
             item_friendshipBracelet: 'assets/images/item_icons_transparent_transparent_cut_6.png',
+            item_machineOil: 'assets/images/item_machine_oil_transparent.png',
             item_spare1: 'assets/images/item_icons_transparent_transparent_cut_7.png',
             item_spare2: 'assets/images/item_icons_transparent_transparent_cut_8.png',
             item_spare3: 'assets/images/item_icons_transparent_transparent_cut_9.png',
-            clue_roster_book: 'assets/images/clue_roster_book_transparent.png',
-            clue_duty_table: 'assets/images/clue_duty_table_transparent.png',
-            clue_timetable: 'assets/images/clue_timetable.png',
-            clue_seatmap_photo: 'assets/images/clue_seatmap_photo_transparent.png',
+            clue_bulletin_board: 'assets/images/clue_bulletin_board.png',
+            clue_roster_book: 'assets/images/clue_roster_book_v2_transparent.png',
+            clue_duty_table: 'assets/images/clue_duty_table_v2_transparent.png',
+            clue_timetable: 'assets/images/clue_timetable_v2.png',
+            clue_seatmap_photo: 'assets/images/clue_seatmap_photo_v2_transparent.png',
             clue_wall_slogan: 'assets/images/clue_wall_slogan.png',
-            clue_water_note: 'assets/images/clue_water_note_transparent.png'
+            clue_water_note: 'assets/images/clue_water_note_transparent.png',
+            suwan_normal_pose: 'assets/images/suwan_normal_pose_transparent.png',
+            suwan_emerge_pose: 'assets/images/suwan_emerge_pose_transparent.png',
+            suwan_jumpscare_closeup: 'assets/images/suwan_jumpscare_closeup_transparent.png',
+            suwan_wrist_bracelet: 'assets/images/suwan_wrist_bracelet_transparent.png'
         },
         InitialState: {
             startBackdropView: 'scene_05_classroom_entry',
@@ -392,7 +375,7 @@
         },
         SceneGroups: {
             lobby: ['scene_01_lobby_gate', 'scene_02_lobby_sidewall'],
-            corridor: ['scene_03_corridor_depth', 'scene_04_corridor_fan_up'],
+            corridor: ['scene_03_corridor_depth', 'scene_03b_corridor_tools_corner', 'scene_04_corridor_fan_up'],
             classroom: ['scene_05_classroom_entry', 'scene_06_double_desks_close', 'scene_07_blackboard_close', 'scene_08_podium_door'],
             ending: ['scene_06_double_desks_close']
         },
@@ -400,6 +383,7 @@
             scene_01_lobby_gate: { group: 'lobby', title: '门厅铁门', image: 'scene_01_lobby_gate' },
             scene_02_lobby_sidewall: { group: 'lobby', title: '门厅侧墙', image: 'scene_02_lobby_sidewall' },
             scene_03_corridor_depth: { group: 'corridor', title: '走廊纵深', image: 'scene_03_corridor_depth' },
+            scene_03b_corridor_tools_corner: { group: 'corridor', title: '清洁工具角', image: 'scene_03b_corridor_tools_corner' },
             scene_04_corridor_fan_up: { group: 'corridor', title: '吊扇抬头', image: 'scene_04_corridor_fan_up' },
             scene_05_classroom_entry: { group: 'classroom', title: '教室门口', image: 'scene_05_classroom_entry' },
             scene_06_double_desks_close: { group: 'classroom', title: '第十三排', image: 'scene_06_double_desks_close' },
@@ -466,6 +450,16 @@
                 clueId: 'friendshipBracelet',
                 description: '褪色塑料珠上刻着 L 和 W，中间断开很久了。',
                 useText: '这不是用来开门的东西，是用来想起人的。'
+            },
+            machineOil: {
+                id: 'machineOil',
+                name: '机油',
+                image: 'item_machineOil',
+                order: 8,
+                clue: false,
+                consumable: true,
+                description: '落了层灰的缝纫机油，盖子有些松动。对锨死的门轴应该有用。',
+                useText: '涂在门轴或锁孔上，让它松一松。'
             }
         },
         Clues: {
@@ -473,7 +467,7 @@
                 id: 'anonymousSeatPhoto',
                 name: '匿名座位表照片',
                 image: 'clue_seatmap_photo',
-                text: '照片里，高三13班座位表被烧掉一角。苏晚的名字被暗红色圈住。'
+                text: '照片里，高二三班座位表被烧掉一角。苏晚的名字被暗红色圈住。'
             },
             rosterSuwan13: {
                 id: 'rosterSuwan13',
@@ -497,7 +491,7 @@
                 id: 'timetableFirstLesson',
                 name: '课程表',
                 image: 'clue_timetable',
-                text: '第一节，别迟到。周三数学=2，周四英语=3，周五语文=1。'
+                text: '每天第一节课，还看得清。上的是什么，书脊上或许记得。'
             },
             wallSlogan: {
                 id: 'wallSlogan',
@@ -520,25 +514,35 @@
                 name: '水渍纸条',
                 image: 'clue_water_note',
                 text: '他们说只要我不出声就没人会受伤，可为什么受伤的一直是我？'
+            },
+            bulletinBoard: {
+                id: 'bulletinBoard',
+                name: '旧公告栏',
+                image: 'clue_bulletin_board',
+                text: '午间广播·播音员一栏的名字，被水渍盖住了。看不清。'
             }
         },
         Intros: {
             // 首次接触交互物时弹出的介绍说明（仅首次触发）
             gate_lock: { title: '门厅铁门', text: '锈死的旧铁门，沉得像一段记忆。锁孔被红锈填满，需要一把对得上的钥匙。' },
-            anonymous_photo: { title: '座位表照片', text: '一张匿名寄来的高三13班座位表，被烧掉一角，苏晚的名字被暗红色圈住。' },
-            seat_map_paper: { title: '座位表照片', text: '一张匿名寄来的高三13班座位表，被烧掉一角，苏晚的名字被暗红色圈住。' },
+            anonymous_photo: { title: '座位表照片', text: '一张匿名寄来的高二三班座位表，被烧掉一角，苏晚的名字被暗红色圈住。' },
+            seat_map_paper: { title: '座位表照片', text: '一张匿名寄来的高二三班座位表，被烧掉一角，苏晚的名字被暗红色圈住。' },
             loose_brick: { title: '松动的砖', text: '墙角这块砖明显凸出、砖缝里全是深色阴影，像被人反复抠动过。徒手撬不动它。' },
             look_up: { title: '头顶的声音', text: '走廊尽头没有门，可那很慢的摩擦声，却像从头顶的黑暗里一点点落下来。' },
             fan: { title: '无风吊扇', text: '没有一丝风，吊扇却在头顶慢慢转动，旧广播的杂讯正从它后面渗出来。' },
             enter_desks: { title: '第十三排', text: '一脏一净两张并排的课桌。靠里那张积着厚灰，靠外那张干净得反常。' },
             linxia_drawer: { title: '林夏的抽屉', text: '积灰的旧抽屉，刻着“林夏”。它该先于那张干净的桌子被打开。' },
             suwan_desk: { title: '干净的课桌', text: '苏晚的课桌干净得像刚被擦过，抽屉上着一把三位数字的密码锁。' },
-            blackboard_words: { title: '渗水的字迹', text: '黑板上的粉笔字正缓缓渗出水痕，歪扭的笔画在潮气里一点点往下流。' },
+            blackboard_words: { title: '黑板上的字', text: '黑板上留着一行歪扭的粉笔字，笔画颤抖，像是用尽了力气才写下来的。' },
             roster: { title: '点名册', text: '讲台上摊开的点名册，名字和学号还清晰可读，某个名字旁有一小块水渍。' },
             duty_table: { title: '值日表', text: '门后钉着的值日表，纸已发黄，写着靠窗第一列的编号规则。' },
             timetable: { title: '课程表', text: '黑板边残留的课程表，只有每天的第一节课还看得清。' },
             wall_slogan: { title: '后墙标语', text: '黑板上方的墙面，褪色的锈红标语依稀还能辨认。凑近些看清那几个字。' },
-            speaker: { title: '旧广播', text: '墙上那只旧广播喇叭蒙着灰，凑近时仿佛还残着一口湿冷的气。' }
+            speaker: { title: '旧广播', text: '墙上那只旧广播喇叭蒙着灰，凑近时仿佛还残着一口湿冷的气。' },
+            classroom_door: { title: '教室锈门', text: '走廊尽头的教室门，锈迹爱爱的。门轴卡死锤死，硬推不动。' },
+            bulletin_board: { title: '旧公告栏', text: '走廊右侧的旧公告栏，贴着一张广播站节目单，数年没人理了。' },
+            faucet: { title: '锈水龙头', text: '清洁工具角落里滴水的旧水龙头，锈迹都快把尼龙嗖死了。' },
+            machine_oil: { title: '机油瓶', text: '落了层灰的缝纫机油，低中弹出一片油光。这东西说不定有用。' }
         },
         Hints: {
             lobby: [
@@ -547,9 +551,9 @@
                 '先拾取半截钢筋，再对侧墙下方松动砖使用它，砖后藏着钥匙。'
             ],
             corridor: [
-                '走廊尽头没有门，声音却像从头顶落下来。',
-                '试着抬头看吊扇，它在无风的地方转动。',
-                '切到吊扇视角并点击上方吊扇，听完广播后教室会打开。'
+                '走廊角落里也许有能用的东西……润滑的东西。',
+                '门轴生锈，需要润滑剂。水只会让锈更严重——找找有没有油。',
+                '清洁工具角落有瓶机油，拾取后对教室门使用，门轴润滑后就能推开。'
             ],
             classroom: [
                 '点名册上的数字，不只是学号。',
@@ -570,7 +574,7 @@
         OverlayTexts: {
             roster: '13号 苏晚 / 广播员',
             duty: '靠窗第一列\n单号向后',
-            timetable: '周三 数学=2\n周四 英语=3\n周五 语文=1'
+            timetable: '第一节课\n还看得清'
         },
         Password: {
             answer: '231',
@@ -599,7 +603,13 @@
                 { id: 'loose_brick', x: 775, y: 1535, w: 155, h: 135, label: '松动砖', type: 'use', item: 'rebar' }
             ],
             scene_03_corridor_depth: [
-                { id: 'look_up', x: 200, y: 60, w: 680, h: 620, label: '头顶的声音', type: 'view' }
+                { id: 'look_up', x: 200, y: 60, w: 680, h: 620, label: '头顶的声音', type: 'view' },
+                { id: 'classroom_door', x: 380, y: 700, w: 320, h: 480, label: '教室锈门', type: 'event' },
+                { id: 'bulletin_board', x: 620, y: 400, w: 340, h: 560, label: '旧公告栏', type: 'clue' }
+            ],
+            scene_03b_corridor_tools_corner: [
+                { id: 'faucet', x: 687, y: 354, w: 265, h: 316, label: '锈水龙头', type: 'event' },
+                { id: 'machine_oil', x: 530, y: 1381, w: 211, h: 510, label: '机油瓶', type: 'pickup', item: 'machineOil' }
             ],
             scene_04_corridor_fan_up: [
                 { id: 'fan', x: 80, y: 190, w: 940, h: 950, label: '无风吊扇', type: 'event' }
@@ -612,7 +622,7 @@
                 { id: 'suwan_desk', x: 500, y: 835, w: 560, h: 1000, label: '干净课桌', type: 'password' }
             ],
             scene_07_blackboard_close: [
-                { id: 'blackboard_words', x: 290, y: 534, w: 634, h: 300, label: '渗水字迹', type: 'event' },
+                { id: 'blackboard_words', x: 290, y: 534, w: 634, h: 300, label: '粉笔字', type: 'event' },
                 { id: 'wall_slogan', x: 300, y: 45, w: 510, h: 165, label: '后墙标语', type: 'clue' },
                 { id: 'roster', x: 110, y: 1365, w: 540, h: 296, label: '点名册', type: 'clue' },
                 { id: 'duty_table', x: 672, y: 1492, w: 365, h: 284, label: '值日表', type: 'clue' },
@@ -633,7 +643,17 @@
             gateOpened: '钥匙转动的声音很轻，门后的走廊却像醒了。',
             corridorEnter: '这里比记忆里更长。',
             lookUp: '头顶传来很慢的摩擦声。',
-            fanEnd: '女声戛然而止，走廊尽头露出教室门缝。',
+            fanAmbience: '这扇就这么转着，没有一丝风。',
+            fanBroadcastEnd: '女声戛然而止，走廊里又只剩雨声。',
+            rustDoorFirst: '门轴锈死了，硬推没用……得让它松一松。',
+            rustDoorRetry: '还没找到能润滑它的东西。',
+            rustDoorHint: '走廊里应该有能用的东西……看看角落。',
+            faucetTrap: '水只会让锈咬得更死……',
+            faucetTrapAgain: '这水龙头帮不上忙。',
+            machineOilPicked: '你拾起机油瓶。瓶盖有些松动，油渍蹭在手心。',
+            machineOilOnDoor: '机油慢慢渗进门轴和锁孔……',
+            rustDoorOpened: '教室里没有人。第十三排，却有一张桌子干净得像刚被擦过。',
+            bulletinBoardText: '这一栏的名字，看不清了。',
             classroomEnter: '教室里没有人。第十三排，却有一张桌子干净得像刚被擦过。',
             seatIntro: '讲台上那本点名册还摊着，门后钉着发黄的值日表……再看看手里那张烧角的座位表照片。把它们对起来，苏晚的位置才认得出。',
             seatProgress1: '线索 1/3：先记下名字旁的那个数字。',
@@ -642,10 +662,10 @@
             seatSolvedLine: '……是这里。我怎么会忘。',
             timetableRuleIntro: '“一日之计在于晨”……要紧的，是每天的第一节课。',
             blackboard: '连你也松开手了，是不是？',
-            photo: '照片里，高三13班座位表被烧掉一角。苏晚的名字被暗红色圈住。',
+            photo: '照片里，高二三班座位表被烧掉一角。苏晚的名字被暗红色圈住。',
             roster: '13号，苏晚。广播员。名字旁有一小块水渍。',
             duty: '靠窗第一列从前排开始编号，单号沿第一列向后排递增。',
-            timetable: '第一节，别迟到。周三数学=2，周四英语=3，周五语文=1。',
+            timetable: '每天第一节课，还看得清。上的是什么，书脊上或许记得。',
             rosterClue: '点名册摊在讲台上。把名单里那个名字和它的学号，仔细记下来。',
             dutyClue: '门后的值日表写着编号的规矩——从哪一列、哪个方向开始数，看清楚。',
             timetableClue: '黑板上的课程表只剩第一节课还清楚。每天的第一节，对着旁边的科目编号看。',
@@ -761,6 +781,26 @@
                 }
             ]
         },
+        // 林夏内心独白（v1.4新增·6个情感峰值节点）
+        // 字色冷青灰 #C8D4D0，字速 22字/秒，每条停留≥1s，止于情绪表达不含解法
+        Monologue: {
+            cps: 22,                    // 字速：22字/秒（比普通叙述慢，营造内心流速感）
+            stayMs: 1000,               // 每条独白显示完后至少停留 1s
+            // ③ 走廊·广播残响戛然而止后（corridorBroadcastPlayed 置 true、屏幕轻抖结束后）
+            broadcast: '那个声音……不，不可能。她不在了，这么多年了。',
+            // ④ 走廊·公告栏旁白「这一栏的名字，看不清了。」显示完毕后
+            bulletinBoard: '广播站……她最喜欢的地方。那时候我要是多陪她一会儿就好了……',
+            // ⑤ 教室·P3座位推理成功后、镜头推近课桌动画结束时
+            seatSolved: '靠窗第三排……她总爱趴在这里看窗外。我怎么会忘了呢。',
+            // ⑥ 教室·林夏旧抽屉打开、道具飘字显示后（最强峰值）
+            linxiaDrawer: '这是我们一人一半的……后来我再也没戴过。对不起，苏晚，我……',
+            // ⑧ 读完水渍纸条后、关窗音效触发前约 200ms（崩溃前的静，气音效果）
+            waterNote: '你一直在等我回答这个问题……对不对？',
+            waterNoteDelayMs: 200,      // 纸条旁白关闭后到主Jump前的间隙
+            // ⑨ 章节结算画面淡入后 600ms（余韵+第二章钩子）
+            ending: '这还只是开始……她要的，不只是我回来。',
+            endingDelayMs: 600          // 结算画面淡入后延迟 600ms 再触发
+        },
         Jump: {
             ghostStartY: 860,
             ghostEndY: 530,
@@ -773,7 +813,18 @@
             backlightOuterRadius: 420,
             backlightInnerColor: 'rgba(200,212,208,0.56)',
             backlightOuterColor: 'rgba(200,212,208,0)',
-            vibratePattern: [120, 80, 180, 60, 220]
+            vibratePattern: [120, 80, 180, 60, 220],
+            // 苏晚浮现演出（suwan_emerge_pose）：等比 contain，从下方纵向浮现
+            emergeStartY: 860,
+            emergeEndY: 480,
+            emergeAlphaMax: 0.92,
+            // 突脸演出：坐姿图（suwan_emerge_pose）整体等比放大推近，从 scale=0.72 极速推至 scale=1.18
+            // 不使用任何狰狞/惊悚脸特写，靠「突然逼近+静默打破」营造压迫
+            jumpscareScaleFrom: 0.72,
+            jumpscareScaleTo: 1.18,
+            jumpscareAlphaMax: 1.0,
+            // 突脸震动（移动端）
+            jumpscareVibratePattern: [150, 60, 200]
         }
     };
 
